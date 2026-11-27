@@ -3,6 +3,31 @@ import { createClient } from '@/lib/supabase/server'
 import { buildWaLink, formatRupiah } from '@/lib/utils'
 import { InvoicePrintActions } from '@/components/invoice/InvoicePrintActions'
 import type { InvoiceWithRelations, PesananWithRelations } from '@/types/database'
+import type { Metadata } from 'next'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const { id } = await params
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from('invoice_pengiriman')
+    .select('nomor_invoice, pemesan:id_pemesan ( nama_jastiper )')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!data) return { title: 'Invoice — Jastip by Jejun' }
+
+  const pemesan = Array.isArray(data.pemesan) ? data.pemesan[0] : data.pemesan
+  const nama = pemesan?.nama_jastiper ?? 'Jastiper'
+  // Format nama file: INV-202611-001 - Ani Wijaya.pdf
+  return {
+    title: `${data.nomor_invoice} - ${nama}`,
+  }
+}
 
 export default async function InvoiceDetailPage({
   params,
@@ -59,7 +84,7 @@ export default async function InvoiceDetailPage({
 
   return (
     <div>
-      <InvoicePrintActions waUrl={waUrl} />
+      <InvoicePrintActions invoice={invoice} items={items} />
 
       {/* Kertas Invoice Siap Cetak */}
       <article className="bg-white rounded-[2rem] print:rounded-none p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.06)] print:shadow-none border border-[#EBDCC7]/60 print:border-0 space-y-6">

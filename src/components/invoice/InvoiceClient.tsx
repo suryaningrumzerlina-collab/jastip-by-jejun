@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { createClient } from '@/lib/supabase/client'
 import { buildWaLink, formatRupiah } from '@/lib/utils'
+import { StickyToolbar } from '@/components/ui/StickyToolbar'
 import { CreateInvoiceModal } from './CreateInvoiceModal'
 import { EditInvoiceModal } from './EditInvoiceModal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -21,6 +22,8 @@ interface InvoiceClientProps {
   initialUnbilled: PesananWithRelations[]
   pemesanList: Pemesan[]
 }
+
+type InvoiceSort = 'nomor_desc' | 'nomor_asc' | 'nama_asc'
 
 const BAYAR_BADGE: Record<StatusPembayaran, { label: string; style: string }> = {
   belum_lunas: { label: 'Belum Lunas', style: 'bg-[#FF6B6B] text-white' },
@@ -45,6 +48,7 @@ export function InvoiceClient({
   const [unbilled, setUnbilled] = useState<PesananWithRelations[]>(initialUnbilled)
   const [filterBayar, setFilterBayar] = useState<StatusPembayaran | 'semua'>('semua')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<InvoiceSort>('nomor_desc')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editingInv, setEditingInv] = useState<InvoiceWithRelations | null>(null)
@@ -53,7 +57,7 @@ export function InvoiceClient({
 
   const filteredInvoices = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return invoices.filter((inv) => {
+    const filtered = invoices.filter((inv) => {
       const matchStatus = filterBayar === 'semua' || inv.status_pembayaran === filterBayar
       if (!matchStatus) return false
       if (!q) return true
@@ -63,7 +67,20 @@ export function InvoiceClient({
         (inv.resi ?? '').toLowerCase().includes(q)
       )
     })
-  }, [invoices, filterBayar, search])
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'nama_asc') {
+        return (a.pemesan?.nama_jastiper ?? '').localeCompare(
+          b.pemesan?.nama_jastiper ?? '',
+          'id'
+        )
+      }
+      if (sortBy === 'nomor_asc') {
+        return a.nomor_invoice.localeCompare(b.nomor_invoice)
+      }
+      return b.nomor_invoice.localeCompare(a.nomor_invoice)
+    })
+  }, [invoices, filterBayar, search, sortBy])
 
   function handleCreated(newInv: InvoiceWithRelations, bundledIds: string[]) {
     setInvoices((prev) => [newInv, ...prev])
@@ -128,81 +145,63 @@ export function InvoiceClient({
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#636E72]">
-            Tagihan &amp; Kurir
-          </p>
-          <h1 className="font-black text-3xl tracking-[-0.02em] text-[#2D3436]">
-            Invoice &amp; Kirim
-          </h1>
-        </div>
+    <div className="space-y-4">
+      <StickyToolbar
+        eyebrow="Tagihan & Kurir"
+        title="Invoice & Kirim"
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Cari nomor invoice, nama, atau resi..."
+        actionLabel="Buat"
+        actionIcon="solar:bill-check-bold"
+        onActionClick={() => setCreateOpen(true)}
+        actionBadge={unbilled.length}
+      >
+        {/* Filter Pembayaran & Sort */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+            {(
+              [
+                { value: 'semua', label: 'Semua' },
+                { value: 'belum_lunas', label: 'Belum Lunas' },
+                { value: 'dp', label: 'DP' },
+                { value: 'lunas', label: 'Lunas' },
+              ] as const
+            ).map((chip) => {
+              const active = filterBayar === chip.value
+              return (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => setFilterBayar(chip.value)}
+                  className={`shrink-0 px-3.5 py-1.5 rounded-full border border-[#EBDCC7] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    active
+                      ? 'bg-white text-[#FF6B6B] shadow-sm'
+                      : 'bg-white/75 text-[#636E72] hover:bg-white'
+                  }`}
+                >
+                  {active && <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B6B] animate-pulse" />}
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
 
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="h-12 px-5 rounded-full bg-[#FF6B6B] hover:bg-[#ff5252] active:scale-95 text-white font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer shrink-0"
-        >
-          <Icon icon="solar:bill-check-bold" width={20} height={20} />
-          <span>Buat</span>
-        </button>
-      </div>
-
-      {/* Info Banner jika ada item siap dibuatkan invoice */}
-      {unbilled.length > 0 && (
-        <div className="flex items-center justify-between gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-[#FFE66D]">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B6B] animate-pulse shrink-0" />
-            <p className="text-xs font-bold text-[#2D3436]">
-              Ada <span className="font-black text-[#FF6B6B]">{unbilled.length} pesanan</span> terkonfirmasi siap dibuatkan invoice.
-            </p>
+          <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#EBDCC7]/70 shadow-xs shrink-0">
+            <Icon icon="solar:sort-vertical-bold" width={15} height={15} className="text-[#4ECDC4]" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as InvoiceSort)}
+              aria-label="Urutkan invoice"
+              className="bg-transparent text-xs font-bold text-[#2D3436] focus:outline-none cursor-pointer"
+            >
+              <option value="nomor_desc">No. Invoice (Terbaru)</option>
+              <option value="nomor_asc">No. Invoice (Terlama)</option>
+              <option value="nama_asc">Nama (A–Z)</option>
+            </select>
           </div>
         </div>
-      )}
-
-      {/* Search Bar */}
-      <div className="flex items-center gap-2.5 bg-white px-5 py-3 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#EBDCC7]/50">
-        <Icon icon="solar:magnifer-linear" className="text-[#4ECDC4] shrink-0" width={20} height={20} />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cari nomor invoice, nama, atau resi..."
-          aria-label="Cari invoice"
-          className="w-full bg-transparent text-sm font-bold text-[#2D3436] placeholder:text-[#636E72]/60 focus:outline-none"
-        />
-      </div>
-
-      {/* Filter Pembayaran */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {(
-          [
-            { value: 'semua', label: 'Semua' },
-            { value: 'belum_lunas', label: 'Belum Lunas' },
-            { value: 'dp', label: 'DP' },
-            { value: 'lunas', label: 'Lunas' },
-          ] as const
-        ).map((chip) => {
-          const active = filterBayar === chip.value
-          return (
-            <button
-              key={chip.value}
-              type="button"
-              onClick={() => setFilterBayar(chip.value)}
-              className={`shrink-0 px-4 py-2 rounded-full border border-[#EBDCC7] font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
-                active
-                  ? 'bg-white text-[#FF6B6B] shadow-sm'
-                  : 'bg-white/70 text-[#636E72] hover:bg-white'
-              }`}
-            >
-              {active && <span className="w-2 h-2 rounded-full bg-[#FF6B6B] animate-pulse" />}
-              {chip.label}
-            </button>
-          )
-        })}
-      </div>
+      </StickyToolbar>
 
       {/* Daftar Invoice */}
       {filteredInvoices.length === 0 ? (
