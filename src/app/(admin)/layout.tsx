@@ -1,4 +1,5 @@
 import { AdminNav } from '@/components/layout/AdminNav'
+import { SWRProvider } from '@/components/providers/SWRProvider'
 
 export default function AdminLayout({
   children,
@@ -23,9 +24,8 @@ export default function AdminLayout({
 
       <AdminNav />
 
-      {/* Konten utama dengan safe-zone bawah 128px untuk Floating Tab Bar */}
       <main className="max-w-2xl mx-auto px-6 pt-2 pb-32">
-        {children}
+        <SWRProvider>{children}</SWRProvider>
       </main>
     </div>
   )

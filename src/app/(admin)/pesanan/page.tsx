@@ -1,31 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
 import { PesananClient } from '@/components/pesanan/PesananClient'
-import type { Batch, Pemesan, PesananWithRelations, Produk } from '@/types/database'
+import { useBatch, usePemesan, usePesanan, useProduk } from '@/hooks/useJastipData'
+import AdminLoading from '../loading'
 
-export default async function PesananPage() {
-  const supabase = await createClient()
+export default function PesananPage() {
+  const { data: pesanan, isLoading: l1 } = usePesanan()
+  const { data: batch, isLoading: l2 } = useBatch()
+  const { data: pemesan, isLoading: l3 } = usePemesan()
+  const { data: produk, isLoading: l4 } = useProduk()
 
-  const [pesananRes, batchRes, pemesanRes, produkRes] = await Promise.all([
-    supabase
-      .from('pesanan')
-      .select(`
-        *,
-        pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-        produk:id_produk ( id, nama_barang, brand ),
-        batch:id_batch ( id, nama_batch )
-      `)
-      .order('order_time', { ascending: false }),
-    supabase.from('batch').select('*').order('created_at', { ascending: false }),
-    supabase.from('pemesan').select('*').order('nama_jastiper', { ascending: true }),
-    supabase.from('produk').select('*').order('nama_barang', { ascending: true }),
-  ])
+  if ((l1 && !pesanan) || (l2 && !batch) || (l3 && !pemesan) || (l4 && !produk)) {
+    return <AdminLoading />
+  }
 
   return (
     <PesananClient
-      initialPesanan={(pesananRes.data ?? []) as unknown as PesananWithRelations[]}
-      batchList={(batchRes.data ?? []) as Batch[]}
-      pemesanList={(pemesanRes.data ?? []) as Pemesan[]}
-      produkList={(produkRes.data ?? []) as Produk[]}
+      initialPesanan={pesanan ?? []}
+      batchList={batch ?? []}
+      pemesanList={pemesan ?? []}
+      produkList={produk ?? []}
     />
   )
 }

@@ -1,28 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useMemo } from 'react'
 import { BelanjaClient } from '@/components/belanja/BelanjaClient'
-import type { Batch, PesananWithRelations } from '@/types/database'
+import { useBatch, usePesanan } from '@/hooks/useJastipData'
+import AdminLoading from '../loading'
 
-export default async function BelanjaPage() {
-  const supabase = await createClient()
+export default function BelanjaPage() {
+  const { data: pesanan, isLoading: l1 } = usePesanan()
+  const { data: batch, isLoading: l2 } = useBatch()
 
-  const [pesananRes, batchRes] = await Promise.all([
-    supabase
-      .from('pesanan')
-      .select(`
-        *,
-        pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-        produk:id_produk ( id, nama_barang, brand ),
-        batch:id_batch ( id, nama_batch )
-      `)
-      .eq('status_jastip', 'tercatat')
-      .order('order_time', { ascending: true }),
-    supabase.from('batch').select('*').order('created_at', { ascending: false }),
-  ])
-
-  return (
-    <BelanjaClient
-      initialPesanan={(pesananRes.data ?? []) as unknown as PesananWithRelations[]}
-      batchList={(batchRes.data ?? []) as Batch[]}
-    />
+  const belumBeli = useMemo(
+    () => (pesanan ?? []).filter((p) => p.status_jastip === 'tercatat'),
+    [pesanan]
   )
+
+  if ((l1 && !pesanan) || (l2 && !batch)) {
+    return <AdminLoading />
+  }
+
+  return <BelanjaClient initialPesanan={belumBeli} batchList={batch ?? []} />
 }

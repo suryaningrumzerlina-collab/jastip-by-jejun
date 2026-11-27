@@ -1,8 +1,11 @@
+'use client'
+
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
-import { createClient } from '@/lib/supabase/server'
+import { useInvoices, usePesanan } from '@/hooks/useJastipData'
 import { formatRupiah, formatTanggalSingkat } from '@/lib/utils'
-import type { PesananWithRelations, StatusJastip } from '@/types/database'
+import AdminLoading from './loading'
+import type { StatusJastip } from '@/types/database'
 
 const STATUS_BADGE: Record<StatusJastip, { label: string; color: string }> = {
   tercatat: { label: 'Tercatat', color: 'text-[#636E72] bg-[#F0E6D6]' },
@@ -11,37 +14,26 @@ const STATUS_BADGE: Record<StatusJastip, { label: string; color: string }> = {
   kosong_batal: { label: 'Kosong/Batal', color: 'text-white bg-[#FF6B6B]' },
 }
 
-export default async function DashboardPage() {
-  const supabase = await createClient()
+export default function DashboardPage() {
+  const { data: allPesanan, isLoading: loadingPesanan } = usePesanan()
+  const { data: allInvoices, isLoading: loadingInvoices } = useInvoices()
 
-  // Ambil data pesanan terbaru beserta relasinya + data invoice belum lunas
-  const [pesananRes, invoiceRes] = await Promise.all([
-    supabase
-      .from('pesanan')
-      .select(`
-        *,
-        pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-        produk:id_produk ( id, nama_barang, brand ),
-        batch:id_batch ( id, nama_batch )
-      `)
-      .order('order_time', { ascending: false }),
-    supabase
-      .from('invoice_pengiriman')
-      .select('id, status_pembayaran, harga_total')
-      .neq('status_pembayaran', 'lunas'),
-  ])
+  if ((loadingPesanan && !allPesanan) || (loadingInvoices && !allInvoices)) {
+    return <AdminLoading />
+  }
 
-  const allPesanan = (pesananRes.data ?? []) as unknown as PesananWithRelations[]
-  const unpaidInvoices = invoiceRes.data ?? []
+  const pesananList = allPesanan ?? []
+  const unpaidInvoices = (allInvoices ?? []).filter(
+    (inv) => inv.status_pembayaran !== 'lunas'
+  )
 
-  // Hitung metrik operasional
-  const pesananAktif = allPesanan.filter((p) => p.status_jastip !== 'kosong_batal')
+  const pesananAktif = pesananList.filter((p) => p.status_jastip !== 'kosong_batal')
   const totalOmzet = pesananAktif.reduce((sum, p) => sum + p.harga_total, 0)
-  const belumBeli = allPesanan.filter((p) => p.status_jastip === 'tercatat').length
-  const siapKonfirmasi = allPesanan.filter((p) => p.status_jastip === 'dapat_barang').length
+  const belumBeli = pesananList.filter((p) => p.status_jastip === 'tercatat').length
+  const siapKonfirmasi = pesananList.filter((p) => p.status_jastip === 'dapat_barang').length
   const belumLunasCount = unpaidInvoices.length
 
-  const recentPesanan = allPesanan.slice(0, 5)
+  const recentPesanan = pesananList.slice(0, 5)
 
   return (
     <div className="space-y-8">
@@ -62,9 +54,8 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* 3 Metric Tiles (Cream Storybook Style) */}
+      {/* 3 Metric Tiles */}
       <section aria-label="Ringkasan tugas" className="grid grid-cols-3 gap-3 sm:gap-4">
-        {/* Tile 1: Belum Beli */}
         <Link
           href="/belanja"
           className="bg-white rounded-[2rem] p-4 flex flex-col items-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-[#EBDCC7]/50 hover:scale-[1.02] transition-transform"
@@ -80,7 +71,6 @@ export default async function DashboardPage() {
           </span>
         </Link>
 
-        {/* Tile 2: Siap Konfirmasi WA */}
         <Link
           href="/pesanan"
           className="bg-white rounded-[2rem] p-4 flex flex-col items-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-[#EBDCC7]/50 hover:scale-[1.02] transition-transform"
@@ -96,7 +86,6 @@ export default async function DashboardPage() {
           </span>
         </Link>
 
-        {/* Tile 3: Tagihan Belum Lunas */}
         <Link
           href="/invoice"
           className="bg-white rounded-[2rem] p-4 flex flex-col items-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-[#EBDCC7]/50 hover:scale-[1.02] transition-transform"

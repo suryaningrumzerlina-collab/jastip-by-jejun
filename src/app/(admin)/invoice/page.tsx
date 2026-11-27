@@ -1,41 +1,32 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useMemo } from 'react'
 import { InvoiceClient } from '@/components/invoice/InvoiceClient'
-import type {
-  InvoiceWithRelations,
-  Pemesan,
-  PesananWithRelations,
-} from '@/types/database'
+import { useInvoices, usePemesan, usePesanan } from '@/hooks/useJastipData'
+import AdminLoading from '../loading'
 
-export default async function InvoicePage() {
-  const supabase = await createClient()
+export default function InvoicePage() {
+  const { data: invoices, isLoading: l1 } = useInvoices()
+  const { data: pesanan, isLoading: l2 } = usePesanan()
+  const { data: pemesan, isLoading: l3 } = usePemesan()
 
-  const [invRes, unbilledRes, pemesanRes] = await Promise.all([
-    supabase
-      .from('invoice_pengiriman')
-      .select(`
-        *,
-        pemesan:id_pemesan ( id, nama_jastiper, no_wa, alamat )
-      `)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('pesanan')
-      .select(`
-        *,
-        pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-        produk:id_produk ( id, nama_barang, brand ),
-        batch:id_batch ( id, nama_batch )
-      `)
-      .eq('status_jastip', 'terkonfirmasi')
-      .is('id_pengiriman', null)
-      .order('order_time', { ascending: true }),
-    supabase.from('pemesan').select('*').order('nama_jastiper', { ascending: true }),
-  ])
+  const unbilled = useMemo(
+    () =>
+      (pesanan ?? []).filter(
+        (p) => p.status_jastip === 'terkonfirmasi' && p.id_pengiriman === null
+      ),
+    [pesanan]
+  )
+
+  if ((l1 && !invoices) || (l2 && !pesanan) || (l3 && !pemesan)) {
+    return <AdminLoading />
+  }
 
   return (
     <InvoiceClient
-      initialInvoices={(invRes.data ?? []) as unknown as InvoiceWithRelations[]}
-      initialUnbilled={(unbilledRes.data ?? []) as unknown as PesananWithRelations[]}
-      pemesanList={(pemesanRes.data ?? []) as Pemesan[]}
+      initialInvoices={invoices ?? []}
+      initialUnbilled={unbilled}
+      pemesanList={pemesan ?? []}
     />
   )
 }
