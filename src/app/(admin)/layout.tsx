@@ -1,21 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
 import { AdminNav } from '@/components/layout/AdminNav'
 
-export default async function AdminLayout({
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-
-  const { data: activeBatch } = await supabase
-    .from('batch')
-    .select('nama_batch')
-    .eq('status', 'aktif')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
   return (
     <div className="relative min-h-dvh overflow-x-hidden">
       {/* Atmospheric Blobs (-z-10) */}
@@ -32,7 +21,7 @@ export default async function AdminLayout({
         className="pointer-events-none fixed -bottom-24 left-1/4 w-64 h-64 rounded-full bg-[#FFE66D] opacity-15 blur-[80px] -z-10"
       />
 
-      <AdminNav activeBatchName={activeBatch?.nama_batch} />
+      <AdminNav />
 
       {/* Konten utama dengan safe-zone bawah 128px untuk Floating Tab Bar */}
       <main className="max-w-2xl mx-auto px-6 pt-2 pb-32">
