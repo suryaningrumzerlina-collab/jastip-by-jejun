@@ -7,7 +7,7 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="relative min-h-dvh overflow-x-hidden">
+    <div className="relative min-h-dvh overflow-x-clip">
       {/* Atmospheric Blobs (-z-10) */}
       <div
         aria-hidden="true"

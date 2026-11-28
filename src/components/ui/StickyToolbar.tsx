@@ -46,7 +46,7 @@ export function StickyToolbar({
         setIsSticky(!entry.isIntersecting)
       },
       {
-        rootMargin: '-88px 0px 0px 0px', // Sesuai tinggi Top App Bar
+        rootMargin: '0px',
         threshold: 0,
       }
     )
@@ -94,11 +94,11 @@ export function StickyToolbar({
       {/* Sentinel tak terlihat untuk mendeteksi posisi scroll */}
       <div ref={sentinelRef} aria-hidden="true" className="h-px w-full -mt-3" />
 
-      {/* Sticky Area: Search Bar + Tombol Ikon + Filter/Sort/Switch */}
+      {/* Sticky Area: Menempel tepat di paling atas layar */}
       <div
-        className={`sticky top-[84px] z-20 -mx-6 px-6 py-2.5 transition-all space-y-2.5 ${
+        className={`sticky top-0 z-30 -mx-6 px-6 py-3 transition-all space-y-2.5 ${
           isSticky
-            ? 'bg-[#FAF5EB]/90 backdrop-blur-md border-b border-[#EBDCC7]/60 shadow-[0_8px_20px_rgb(0,0,0,0.03)]'
+            ? 'bg-[#FAF5EB]/95 backdrop-blur-md border-b border-[#EBDCC7]/70 shadow-[0_8px_20px_rgb(0,0,0,0.04)]'
             : ''
         }`}
       >
