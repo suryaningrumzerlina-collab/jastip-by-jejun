@@ -112,8 +112,14 @@ export function CreateInvoiceModal({
       .reduce((sum, item) => sum + item.harga_total, 0)
   }, [pemesanItems, selectedPesananIds])
 
+  const totalFee = useMemo(() => {
+  return pemesanItems
+    .filter((item) => selectedPesananIds.includes(item.id))
+    .reduce((sum, item) => sum + (item.fee_total ?? 0), 0)
+}, [pemesanItems, selectedPesananIds])
+
   const parsedOngkir = parseInt(ongkir.replace(/\D/g, ''), 10) || 0
-  const grandTotal = hargaBundle + parsedOngkir
+  const grandTotal = hargaBundle + totalFee + parsedOngkir
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -138,6 +144,8 @@ export function CreateInvoiceModal({
         .from('invoice_pengiriman')
         .insert({
           nomor_invoice: generateNomorInvoice(),
+          id_batch: pemesanItems.find((i) => selectedPesananIds.includes(i.id))?.id_batch ?? null,
+          total_fee: totalFee,
           id_pemesan: selectedPemesanId,
           harga_bundle: hargaBundle,
           jasa_pengiriman: jasaPengiriman.trim() || null,
@@ -396,6 +404,10 @@ export function CreateInvoiceModal({
           <div className="flex justify-between text-xs font-bold text-[#636E72]">
             <span>Total Barang ({selectedPesananIds.length} item)</span>
             <span>{formatRupiah(hargaBundle)}</span>
+          </div>
+          <div className="flex justify-between text-xs font-bold text-[#4ECDC4]">
+            <span>Total Fee Jastip</span>
+            <span>{formatRupiah(totalFee)}</span>
           </div>
           <div className="flex justify-between text-xs font-bold text-[#636E72]">
             <span>Ongkir</span>

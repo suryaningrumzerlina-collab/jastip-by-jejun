@@ -9,6 +9,7 @@ import type {
   PesananWithRelations,
   Produk,
 } from '@/types/database'
+import type { AturanFee } from '@/types/database'
 
 const supabase = createClient()
 
@@ -19,8 +20,9 @@ export function usePesanan() {
       .select(`
         *,
         pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-        produk:id_produk ( id, nama_barang, brand ),
+        produk:id_produk ( id, nama_barang, brand, tipe_barang ),
         batch:id_batch ( id, nama_batch )
+        
       `)
       .order('order_time', { ascending: false })
 
@@ -77,5 +79,18 @@ export function useProduk() {
 
     if (error) throw error
     return (data ?? []) as Produk[]
+  })
+}
+
+export function useAturanFee() {
+  return useSWR<AturanFee[]>('aturan_fee', async () => {
+    const { data, error } = await supabase
+      .from('aturan_fee')
+      .select('*')
+      .order('kategori', { ascending: true })
+      .order('min_harga', { ascending: true })
+
+    if (error) throw error
+    return (data ?? []) as AturanFee[]
   })
 }

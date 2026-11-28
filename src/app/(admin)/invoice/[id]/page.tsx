@@ -195,6 +195,12 @@ export default async function InvoiceDetailPage({
             <span>Subtotal Barang</span>
             <span>{formatRupiah(invoice.harga_bundle)}</span>
           </div>
+          {invoice.total_fee > 0 && (
+          <div className="flex justify-between text-[#4ECDC4]">
+            <span>Biaya Jasa (Fee Jastip)</span>
+            <span>{formatRupiah(invoice.total_fee)}</span>
+          </div>
+          )}
           <div className="flex justify-between text-[#636E72]">
             <span>Ongkir ({invoice.jasa_pengiriman || 'Kurir'})</span>
             <span>{formatRupiah(invoice.ongkir)}</span>

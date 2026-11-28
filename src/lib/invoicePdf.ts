@@ -76,10 +76,11 @@ export async function generateAndUploadInvoicePdf(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.text(`Subtotal Barang: ${formatRupiah(invoice.harga_bundle)}`, 196, finalY, { align: 'right' })
+  doc.text(`Fee Jastip: ${formatRupiah(invoice.total_fee ?? 0)}`, 196, finalY + 5, { align: 'right' })
   doc.text(
     `Ongkir (${invoice.jasa_pengiriman || 'Kurir'}): ${formatRupiah(invoice.ongkir)}`,
     196,
-    finalY + 6,
+    finalY + 11,
     { align: 'right' }
   )
 

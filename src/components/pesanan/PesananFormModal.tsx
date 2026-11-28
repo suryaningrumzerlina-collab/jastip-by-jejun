@@ -2,8 +2,12 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { formatRupiah } from '@/lib/utils'
+import { hitungFeeSatuan } from '@/lib/feeCalculator'
+import { useAturanFee } from '@/hooks/useJastipData'
+import { useActiveBatch } from '@/components/providers/ActiveBatchProvider'
 import type {
   Batch,
   Pemesan,
@@ -39,33 +43,56 @@ export function PesananFormModal({
   onSaved,
 }: PesananFormModalProps) {
   const supabase = createClient()
+  const { data: aturanFeeList = [] } = useAturanFee()
+  const { activeBatchId } = useActiveBatch()
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const batchId = useId()
   const pemesanId = useId()
+  const brandFilterId = useId()
   const produkId = useId()
   const varianId = useId()
   const qtyId = useId()
   const hargaId = useId()
+  const feeId = useId()
   const statusId = useId()
   const catatanId = useId()
 
-  const defaultActiveBatch = useMemo(
-    () => batchList.find((b) => b.status === 'aktif')?.id ?? batchList[0]?.id ?? '',
-    [batchList]
-  )
+  const defaultBatch = useMemo(() => {
+    if (activeBatchId !== 'semua') return activeBatchId
+    return batchList.find((b) => b.status === 'aktif')?.id ?? batchList[0]?.id ?? ''
+  }, [activeBatchId, batchList])
 
   const [idBatch, setIdBatch] = useState('')
   const [idPemesan, setIdPemesan] = useState('')
+  const [selectedBrand, setSelectedBrand] = useState('semua')
   const [idProduk, setIdProduk] = useState('')
   const [varianDipilih, setVarianDipilih] = useState('')
   const [qty, setQty] = useState('1')
   const [hargaSatuan, setHargaSatuan] = useState('')
+  const [feeSatuan, setFeeSatuan] = useState('0')
   const [statusJastip, setStatusJastip] = useState<StatusJastip>('tercatat')
   const [catatan, setCatatan] = useState('')
 
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // Daftar unik Brand untuk dropdown filter
+  const brandOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of produkList) {
+      set.add(p.brand?.trim() || 'Tanpa Brand')
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'id'))
+  }, [produkList])
+
+  // Daftar produk yang sudah disaring berdasarkan Brand
+  const filteredProdukList = useMemo(() => {
+    if (selectedBrand === 'semua') return produkList
+    return produkList.filter(
+      (p) => (p.brand?.trim() || 'Tanpa Brand') === selectedBrand
+    )
+  }, [produkList, selectedBrand])
 
   const selectedProduk = useMemo(
     () => produkList.find((p) => p.id === idProduk) ?? null,
@@ -79,22 +106,27 @@ export function PesananFormModal({
 
   useEffect(() => {
     if (isOpen) {
-      setIdBatch(initialData?.id_batch ?? defaultActiveBatch)
+      setIdBatch(initialData?.id_batch ?? defaultBatch)
       setIdPemesan(initialData?.id_pemesan ?? '')
+      setSelectedBrand(
+        initialData?.produk?.brand?.trim()
+          ? initialData.produk.brand.trim()
+          : 'semua'
+      )
       setIdProduk(initialData?.id_produk ?? '')
       setVarianDipilih(initialData?.varian_dipilih ?? '')
       setQty(initialData ? String(initialData.qty) : '1')
       setHargaSatuan(initialData ? String(initialData.harga_satuan) : '')
+      setFeeSatuan(initialData ? String(initialData.fee_satuan ?? 0) : '0')
       setStatusJastip(initialData?.status_jastip ?? 'tercatat')
       setCatatan(initialData?.catatan ?? '')
       setErrorMsg(null)
     }
-  }, [isOpen, initialData, defaultActiveBatch])
+  }, [isOpen, initialData, defaultBatch])
 
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
-
     if (isOpen && !dialog.open) {
       dialog.showModal()
     } else if (!isOpen && dialog.open) {
@@ -102,52 +134,76 @@ export function PesananFormModal({
     }
   }, [isOpen])
 
-  // Saat produk diganti, otomatis isi varian pertama & harga
+  function applyAutoFee(nextHarga: number, nextTipe: string | null | undefined, nextBatch: string) {
+    const { totalFeeSatuan } = hitungFeeSatuan(nextHarga, nextTipe, nextBatch, aturanFeeList)
+    setFeeSatuan(String(totalFeeSatuan))
+  }
+
+  function handleBatchChange(nextBatch: string) {
+    setIdBatch(nextBatch)
+    const numericHarga = parseInt(hargaSatuan.replace(/\D/g, ''), 10) || 0
+    applyAutoFee(numericHarga, selectedProduk?.tipe_barang, nextBatch)
+  }
+
+  function handleBrandChange(nextBrand: string) {
+    setSelectedBrand(nextBrand)
+    setIdProduk('')
+    setVarianDipilih('')
+    setHargaSatuan('')
+    setFeeSatuan('0')
+  }
+
   function handleProdukChange(nextProdukId: string) {
     setIdProduk(nextProdukId)
     const prod = produkList.find((p) => p.id === nextProdukId)
     if (!prod) {
       setVarianDipilih('')
       setHargaSatuan('')
+      setFeeSatuan('0')
       return
     }
 
     const listVarian = Array.isArray(prod.varian) ? prod.varian : []
-    if (listVarian.length > 0) {
-      setVarianDipilih(listVarian[0].nama)
-      setHargaSatuan(String(listVarian[0].harga))
-    } else {
-      setVarianDipilih('')
-      setHargaSatuan(String(prod.harga_dasar))
-    }
+    const hargaAwal = listVarian.length > 0 ? listVarian[0].harga : prod.harga_dasar
+    setVarianDipilih(listVarian.length > 0 ? listVarian[0].nama : '')
+    setHargaSatuan(String(hargaAwal))
+    applyAutoFee(hargaAwal, prod.tipe_barang, idBatch)
   }
 
-  // Saat varian diganti, otomatis perbarui harga satuan
   function handleVarianChange(nextVarianNama: string) {
     setVarianDipilih(nextVarianNama)
     const found = varianOptions.find((v) => v.nama === nextVarianNama)
     if (found) {
       setHargaSatuan(String(found.harga))
+      applyAutoFee(found.harga, selectedProduk?.tipe_barang, idBatch)
     }
   }
 
-  const previewTotal =
-    (parseInt(qty, 10) || 0) * (parseInt(hargaSatuan.replace(/\D/g, ''), 10) || 0)
+  function handleHargaManualChange(raw: string) {
+    const clean = raw.replace(/\D/g, '')
+    setHargaSatuan(clean)
+    const numeric = parseInt(clean, 10) || 0
+    applyAutoFee(numeric, selectedProduk?.tipe_barang, idBatch)
+  }
+
+  const parsedQty = parseInt(qty, 10) || 0
+  const parsedHarga = parseInt(hargaSatuan.replace(/\D/g, ''), 10) || 0
+  const parsedFee = parseInt(feeSatuan.replace(/\D/g, ''), 10) || 0
+  const previewBarang = parsedQty * parsedHarga
+  const previewFee = parsedQty * parsedFee
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErrorMsg(null)
-
-    const parsedQty = parseInt(qty, 10) || 1
-    const parsedHarga = parseInt(hargaSatuan.replace(/\D/g, ''), 10) || 0
 
     const payload = {
       id_batch: idBatch || null,
       id_pemesan: idPemesan,
       id_produk: idProduk,
       varian_dipilih: varianDipilih.trim() || null,
-      qty: parsedQty,
+      qty: parsedQty || 1,
       harga_satuan: parsedHarga,
+      fee_satuan: parsedFee,
       status_jastip: statusJastip,
       catatan: catatan.trim() || null,
     }
@@ -155,7 +211,7 @@ export function PesananFormModal({
     const selectQuery = `
       *,
       pemesan:id_pemesan ( id, nama_jastiper, no_wa ),
-      produk:id_produk ( id, nama_barang, brand ),
+      produk:id_produk ( id, nama_barang, brand, tipe_barang ),
       batch:id_batch ( id, nama_batch )
     `
 
@@ -181,10 +237,10 @@ export function PesananFormModal({
         if (error) throw error
         onSaved(data as unknown as PesananWithRelations, false)
       }
+      mutate('pesanan')
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menyimpan pesanan.'
-      setErrorMsg(msg)
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan pesanan.')
     } finally {
       setIsSaving(false)
     }
@@ -237,18 +293,18 @@ export function PesananFormModal({
               htmlFor={batchId}
               className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#636E72] pl-2"
             >
-              Batch PO
+              Batch / Event
             </label>
             <select
               id={batchId}
               value={idBatch}
-              onChange={(e) => setIdBatch(e.target.value)}
+              onChange={(e) => handleBatchChange(e.target.value)}
               className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
             >
               <option value="">Tanpa Batch</option>
               {batchList.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.nama_batch} {b.status === 'aktif' ? '(Aktif)' : ''}
+                  {b.nama_batch}
                 </option>
               ))}
             </select>
@@ -280,6 +336,29 @@ export function PesananFormModal({
           </div>
         </div>
 
+        {/* Filter Brand (Mempersempit daftar produk) */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor={brandFilterId}
+            className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#4ECDC4] pl-2"
+          >
+            Filter Brand
+          </label>
+          <select
+            id={brandFilterId}
+            value={selectedBrand}
+            onChange={(e) => handleBrandChange(e.target.value)}
+            className="w-full h-11 px-4 rounded-full bg-[#4ECDC4]/10 border border-[#4ECDC4]/40 text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
+          >
+            <option value="semua">Semua Brand ({produkList.length} produk)</option>
+            {brandOptions.map((brand) => (
+              <option key={brand} value={brand}>
+                {brand}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Produk */}
         <div className="space-y-1.5">
           <label
@@ -296,18 +375,21 @@ export function PesananFormModal({
             className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
           >
             <option value="" disabled>
-              Pilih barang...
+              Pilih barang ({filteredProdukList.length} tersedia)...
             </option>
-            {produkList.map((prod) => (
+            {filteredProdukList.map((prod) => (
               <option key={prod.id} value={prod.id}>
-                {prod.brand ? `[${prod.brand}] ` : ''}
+                {selectedBrand === 'semua' && prod.brand ? `[${prod.brand}] ` : ''}
                 {prod.nama_barang}
+                {prod.tipe_barang && prod.tipe_barang !== 'Reguler'
+                  ? ` (${prod.tipe_barang})`
+                  : ''}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Varian (Muncul otomatis jika produk memiliki varian JSONB) */}
+        {/* Varian */}
         {varianOptions.length > 0 && (
           <div className="space-y-1.5">
             <label
@@ -332,8 +414,8 @@ export function PesananFormModal({
           </div>
         )}
 
-        {/* Qty & Harga Satuan */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Qty, Harga Satuan, & Fee Satuan */}
+        <div className="grid grid-cols-3 gap-2.5">
           <div className="space-y-1.5">
             <label
               htmlFor={qtyId}
@@ -349,16 +431,16 @@ export function PesananFormModal({
               required
               value={qty}
               onChange={(e) => setQty(e.target.value)}
-              className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] text-center focus:bg-white focus:border-[#4ECDC4]"
+              className="w-full h-11 px-3 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] text-center"
             />
           </div>
 
-          <div className="col-span-2 space-y-1.5">
+          <div className="space-y-1.5">
             <label
               htmlFor={hargaId}
               className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#636E72] pl-2"
             >
-              Harga Satuan (Rp) *
+              Harga *
             </label>
             <input
               id={hargaId}
@@ -366,21 +448,49 @@ export function PesananFormModal({
               inputMode="numeric"
               required
               value={hargaSatuan}
-              onChange={(e) => setHargaSatuan(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => handleHargaManualChange(e.target.value)}
               placeholder="0"
-              className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
+              className="w-full h-11 px-3 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436]"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor={feeId}
+              className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#4ECDC4] pl-2"
+            >
+              Fee/Item
+            </label>
+            <input
+              id={feeId}
+              type="text"
+              inputMode="numeric"
+              value={feeSatuan}
+              onChange={(e) => setFeeSatuan(e.target.value.replace(/\D/g, ''))}
+              placeholder="0"
+              className="w-full h-11 px-3 rounded-full bg-[#4ECDC4]/10 border border-[#4ECDC4]/40 text-sm font-bold text-[#2D3436]"
             />
           </div>
         </div>
 
-        {/* Preview Total */}
-        <div className="flex items-center justify-between bg-[#FAF5EB] rounded-2xl px-4 py-3 border border-[#EBDCC7]/70">
-          <span className="text-xs font-black uppercase tracking-[0.1em] text-[#636E72]">
-            Subtotal Item
-          </span>
-          <span className="font-black text-lg text-[#FF6B6B]">
-            {formatRupiah(previewTotal)}
-          </span>
+        {/* Preview Total Barang + Fee */}
+        <div className="bg-[#FAF5EB] rounded-2xl px-4 py-3 border border-[#EBDCC7]/70 space-y-1">
+          <div className="flex justify-between text-xs font-bold text-[#636E72]">
+            <span>Subtotal Barang</span>
+            <span>{formatRupiah(previewBarang)}</span>
+          </div>
+          <div className="flex justify-between text-xs font-bold text-[#4ECDC4]">
+            <span>Total Fee ({parsedQty} &times; {formatRupiah(parsedFee)})</span>
+            <span>+{formatRupiah(previewFee)}</span>
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-[#EBDCC7]">
+            <span className="text-xs font-black uppercase tracking-[0.1em] text-[#2D3436]">
+              Total Tagihan Item
+            </span>
+            <span className="font-black text-base text-[#FF6B6B]">
+              {formatRupiah(previewBarang + previewFee)}
+            </span>
+          </div>
         </div>
 
         {/* Status & Catatan */}
@@ -395,7 +505,7 @@ export function PesananFormModal({
             id={statusId}
             value={statusJastip}
             onChange={(e) => setStatusJastip(e.target.value as StatusJastip)}
-            className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
+            className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436]"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -418,11 +528,10 @@ export function PesananFormModal({
             value={catatan}
             onChange={(e) => setCatatan(e.target.value)}
             placeholder="Cth: Jika warna pink habis, boleh ganti lilac..."
-            className="w-full p-4 rounded-2xl bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4] resize-none"
+            className="w-full p-4 rounded-2xl bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] resize-none"
           />
         </div>
 
-        {/* Tombol Aksi */}
         <div className="flex gap-3 pt-2">
           <button
             type="button"

@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase/client'
+import { DEFAULT_TIPE_BARANG } from '@/lib/feeCalculator'
+import { useBatch } from '@/hooks/useJastipData'
 import { VarianEditor } from './VarianEditor'
 import type { Produk, VarianProduk } from '@/types/database'
 
@@ -20,38 +23,43 @@ export function ProdukFormModal({
   onSaved,
 }: ProdukFormModalProps) {
   const supabase = createClient()
+  const { data: batchList = [] } = useBatch()
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const namaId = useId()
   const brandId = useId()
   const hargaId = useId()
+  const tipeId = useId()
+  const tipeListId = useId()
+  const batchId = useId()
   const deskripsiId = useId()
 
   const [namaBarang, setNamaBarang] = useState('')
   const [brand, setBrand] = useState('')
   const [hargaDasar, setHargaDasar] = useState('')
+  const [tipeBarang, setTipeBarang] = useState('Reguler')
+  const [idBatch, setIdBatch] = useState('')
   const [deskripsi, setDeskripsi] = useState('')
   const [varian, setVarian] = useState<VarianProduk[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Sinkronisasi state saat modal dibuka
   useEffect(() => {
     if (isOpen) {
       setNamaBarang(initialData?.nama_barang ?? '')
       setBrand(initialData?.brand ?? '')
       setHargaDasar(initialData ? String(initialData.harga_dasar) : '')
+      setTipeBarang(initialData?.tipe_barang ?? 'Reguler')
+      setIdBatch(initialData?.id_batch ?? '')
       setDeskripsi(initialData?.deskripsi ?? '')
       setVarian(Array.isArray(initialData?.varian) ? initialData.varian : [])
       setErrorMsg(null)
     }
   }, [isOpen, initialData])
 
-  // Kontrol native <dialog>
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
-
     if (isOpen && !dialog.open) {
       dialog.showModal()
     } else if (!isOpen && dialog.open) {
@@ -73,6 +81,8 @@ export function ProdukFormModal({
       brand: brand.trim() || null,
       deskripsi: deskripsi.trim() || null,
       harga_dasar: parsedHarga,
+      tipe_barang: tipeBarang.trim() || 'Reguler',
+      id_batch: idBatch || null,
       varian: cleanedVarian,
     }
 
@@ -98,10 +108,10 @@ export function ProdukFormModal({
         if (error) throw error
         onSaved(data as Produk, false)
       }
+      mutate('produk')
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menyimpan produk.'
-      setErrorMsg(msg)
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan produk.')
     } finally {
       setIsSaving(false)
     }
@@ -160,7 +170,7 @@ export function ProdukFormModal({
             required
             value={namaBarang}
             onChange={(e) => setNamaBarang(e.target.value)}
-            placeholder="Cth: Sepatu Anak Mini Melissa"
+            placeholder="Cth: Stroller Cabin Friendly"
             className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
           />
         </div>
@@ -178,7 +188,7 @@ export function ProdukFormModal({
               type="text"
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
-              placeholder="Cth: Uniqlo / Smiggle"
+              placeholder="Cth: Bugaboo / Uniqlo"
               className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
             />
           </div>
@@ -203,6 +213,54 @@ export function ProdukFormModal({
           </div>
         </div>
 
+        {/* Tipe Barang (untuk Extra Fee) & Batch/Event */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label
+              htmlFor={tipeId}
+              className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#636E72] pl-2"
+            >
+              Tipe Barang (Fee)
+            </label>
+            <input
+              id={tipeId}
+              list={tipeListId}
+              type="text"
+              value={tipeBarang}
+              onChange={(e) => setTipeBarang(e.target.value)}
+              placeholder="Reguler"
+              className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
+            />
+            <datalist id={tipeListId}>
+              {DEFAULT_TIPE_BARANG.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor={batchId}
+              className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#636E72] pl-2"
+            >
+              Event / Batch (Opsional)
+            </label>
+            <select
+              id={batchId}
+              value={idBatch}
+              onChange={(e) => setIdBatch(e.target.value)}
+              className="w-full h-11 px-4 rounded-full bg-[#FAF5EB]/60 border border-[#EBDCC7] text-sm font-bold text-[#2D3436] focus:bg-white focus:border-[#4ECDC4]"
+            >
+              <option value="">Umum (Semua Event)</option>
+              {batchList.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.nama_batch}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="space-y-1.5">
           <label
             htmlFor={deskripsiId}
@@ -220,7 +278,6 @@ export function ProdukFormModal({
           />
         </div>
 
-        {/* Editor Varian JSONB */}
         <div className="pt-1">
           <VarianEditor
             value={varian}
@@ -229,7 +286,6 @@ export function ProdukFormModal({
           />
         </div>
 
-        {/* Tombol Simpan */}
         <div className="flex gap-3 pt-3">
           <button
             type="button"

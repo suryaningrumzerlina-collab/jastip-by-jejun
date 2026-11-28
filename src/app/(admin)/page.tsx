@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { useInvoices, usePesanan } from '@/hooks/useJastipData'
+import { useActiveBatch } from '@/components/providers/ActiveBatchProvider'
 import { formatRupiah, formatTanggalSingkat } from '@/lib/utils'
 import AdminLoading from './loading'
 import type { StatusJastip } from '@/types/database'
@@ -15,6 +16,7 @@ const STATUS_BADGE: Record<StatusJastip, { label: string; color: string }> = {
 }
 
 export default function DashboardPage() {
+  const { activeBatchId } = useActiveBatch()
   const { data: allPesanan, isLoading: loadingPesanan } = usePesanan()
   const { data: allInvoices, isLoading: loadingInvoices } = useInvoices()
 
@@ -22,13 +24,18 @@ export default function DashboardPage() {
     return <AdminLoading />
   }
 
-  const pesananList = allPesanan ?? []
+  const pesananList = (allPesanan ?? []).filter(
+    (p) => activeBatchId === 'semua' || p.id_batch === activeBatchId
+  )
   const unpaidInvoices = (allInvoices ?? []).filter(
-    (inv) => inv.status_pembayaran !== 'lunas'
+    (inv) =>
+      inv.status_pembayaran !== 'lunas' &&
+      (activeBatchId === 'semua' || inv.id_batch === activeBatchId)
   )
 
   const pesananAktif = pesananList.filter((p) => p.status_jastip !== 'kosong_batal')
   const totalOmzet = pesananAktif.reduce((sum, p) => sum + p.harga_total, 0)
+  const totalFee = pesananAktif.reduce((sum, p) => sum + (p.fee_total ?? 0), 0)
   const belumBeli = pesananList.filter((p) => p.status_jastip === 'tercatat').length
   const siapKonfirmasi = pesananList.filter((p) => p.status_jastip === 'dapat_barang').length
   const belumLunasCount = unpaidInvoices.length
@@ -46,11 +53,22 @@ export default function DashboardPage() {
           {formatRupiah(totalOmzet)}
         </h1>
 
-        <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-[#EBDCC7] mt-4">
-          <span className="w-2 h-2 rounded-full bg-[#FF6B6B] animate-pulse" />
-          <span className="text-xs font-bold text-[#FF6B6B]">
-            {pesananAktif.length} Item Aktif Tercatat
-          </span>
+        {/* Total Fee Didapat */}
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-[#4ECDC4]/50">
+            <Icon icon="solar:tag-price-bold" width={16} height={16} className="text-[#4ECDC4]" />
+            <span className="text-xs font-bold text-[#636E72]">Total Fee:</span>
+            <span className="text-sm font-black text-[#4ECDC4]">
+              {formatRupiah(totalFee)}
+            </span>
+          </div>
+
+          <div className="inline-flex items-center gap-2 bg-white/80 px-3.5 py-1.5 rounded-full border border-[#EBDCC7]">
+            <span className="w-2 h-2 rounded-full bg-[#FF6B6B] animate-pulse" />
+            <span className="text-[11px] font-bold text-[#FF6B6B]">
+              {pesananAktif.length} Item Aktif Tercatat
+            </span>
+          </div>
         </div>
       </section>
 
@@ -118,7 +136,7 @@ export default function DashboardPage() {
         {recentPesanan.length === 0 ? (
           <div className="bg-white rounded-[2rem] p-8 text-center shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-[#EBDCC7]/50">
             <p className="font-bold text-sm text-[#636E72]">
-              Belum ada pesanan tercatat. Yuk mulai catat pesanan pertama!
+              Belum ada pesanan tercatat untuk batch ini.
             </p>
           </div>
         ) : (
@@ -151,9 +169,14 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="font-black text-base text-[#2D3436]">
+                    <span className="font-black text-base text-[#2D3436] block">
                       {formatRupiah(item.harga_total)}
                     </span>
+                    {item.fee_total > 0 && (
+                      <span className="text-[11px] font-bold text-[#4ECDC4]">
+                        +Fee {formatRupiah(item.fee_total)}
+                      </span>
+                    )}
                   </div>
                 </div>
               )
