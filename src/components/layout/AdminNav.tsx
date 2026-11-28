@@ -37,7 +37,7 @@ export function AdminNav({ activeBatchName }: { activeBatchName?: string }) {
   return (
     <>
       {/* Top App Bar (Three-Cluster) */}
-      <header className="print:hidden relative z-30 flex justify-between items-center max-w-2xl mx-auto px-6 pt-6 pb-4">
+      <header className="print:hidden relative z-50 flex justify-between items-center max-w-2xl mx-auto px-6 pt-6 pb-4">
         {/* Left: Menu Master Data */}
         <div className="relative">
           <button
