@@ -93,7 +93,7 @@ export default function ReportPage() {
 
       {/* Pilihan Batch / Event (Menampilkan semua batch) */}
       <div className="bg-white rounded-[2rem] p-4 shadow-[0_8px_30px_rgb(0,0,0,0.05)] border border-[#EBDCC7]/50 space-y-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 min-w-0">
           <span className="text-xs font-black uppercase tracking-[0.1em] text-[#636E72] pl-2 shrink-0">
             Pilih Event
           </span>
@@ -101,7 +101,7 @@ export default function ReportPage() {
             value={effectiveBatchId}
             onChange={(e) => setSelectedBatchId(e.target.value)}
             aria-label="Pilih batch untuk report"
-            className="flex-1 max-w-xs h-10 px-4 rounded-full bg-[#FAF5EB] border border-[#EBDCC7] text-sm font-bold text-[#2D3436]"
+            className="w-48 sm:w-64 min-w-0 h-10 px-4 rounded-full bg-[#FAF5EB] border border-[#EBDCC7] text-sm font-bold text-[#2D3436] truncate focus:border-[#4ECDC4]"
           >
             {batches.map((b) => (
               <option key={b.id} value={b.id}>

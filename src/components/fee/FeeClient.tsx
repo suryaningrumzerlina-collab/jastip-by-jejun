@@ -112,7 +112,7 @@ export function FeeClient({ initialRules, batchList }: FeeClientProps) {
           value={selectedBatch}
           onChange={(e) => setSelectedBatch(e.target.value)}
           aria-label="Pilih batch untuk aturan fee"
-          className="flex-1 max-w-xs h-10 px-4 rounded-full bg-[#FAF5EB] border border-[#EBDCC7] text-sm font-bold text-[#2D3436]"
+          className="w-48 sm:w-64 min-w-0 truncate h-10 px-4 rounded-full bg-[#FAF5EB] border border-[#EBDCC7] text-sm font-bold text-[#2D3436]"
         >
           {batchList.map((b) => (
             <option key={b.id} value={b.id}>
